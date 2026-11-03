@@ -1,0 +1,6 @@
+node_modules/
+.env
+npm-debug.log*
+.opencode/
+public/uploads/products/*
+!public/uploads/products/.gitkeep

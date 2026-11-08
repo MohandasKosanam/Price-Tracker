@@ -512,12 +512,21 @@ app.use((error, req, res, next) => {
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-initializeDatabase().finally(() => {
-  app.listen(PORT, () => {
-    console.log(`LocalPrice is running at http://localhost:${PORT}`);
-    if (isDatabaseReady()) console.log('LocalPrice persistence: MySQL ready.');
-    else console.warn('LocalPrice persistence is unavailable. Run npm run db:check after configuring MySQL.');
-  });
-});
+const databaseInitialization = initializeDatabase();
 
-module.exports = { app };
+if (!isVercelRuntime) {
+  databaseInitialization.finally(() => {
+    app.listen(PORT, () => {
+      console.log(`LocalPrice is running at http://localhost:${PORT}`);
+      if (isDatabaseReady()) console.log('LocalPrice persistence: MySQL ready.');
+      else console.warn('LocalPrice persistence is unavailable. Run npm run db:check after configuring MySQL.');
+    });
+  });
+}
+
+module.exports = isVercelRuntime
+  ? async function vercelHandler(req, res) {
+      await databaseInitialization;
+      return app(req, res);
+    }
+  : app;

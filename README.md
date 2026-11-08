@@ -1,6 +1,6 @@
 # LocalPrice
 
-LocalPrice compares prices at nearby local stores. The frontend uses the existing HTML, CSS, and JavaScript. Express provides the API, and MySQL 8.4 stores accounts, stores, products, listings, and price history.
+LocalPrice compares prices at nearby local stores. The frontend uses the existing HTML, CSS, and JavaScript. Express provides the API. Local development uses MySQL 8.4; the Vercel deployment can use the linked Neon PostgreSQL database.
 
 ## Run locally on Windows
 
@@ -34,9 +34,15 @@ The shop-owner account is linked to an approved sample store. Newly registered s
 
 ## Persistence and authentication
 
-Registration, account roles, store approval, catalogue products, store listings, prices, and price history are stored in MySQL. Passwords are stored only as bcrypt hashes. Role checks use the existing Express authentication middleware. Sessions use the existing Express session mechanism; after restarting the server, sign in again. Database records remain in MySQL.
+Registration, account roles, store approval, catalogue products, store listings, prices, and price history are stored in the configured database. Passwords are stored only as bcrypt hashes. Role checks use the existing Express authentication middleware. Hosted sessions persist in PostgreSQL; local MySQL development keeps the Express session behavior.
 
-When MySQL is unavailable, `/api/health` reports an unavailable status and database-backed operations return an error. The app does not silently switch to temporary in-memory catalogue data.
+## Vercel cloud database
+
+The Vercel deployment can use the connected Neon PostgreSQL integration. Link the Neon resource to the `price-tracker` Vercel project and make sure it provides `DATABASE_URL`; Vercel keeps this connection string as an encrypted environment variable. The app uses PostgreSQL when `DATABASE_URL` exists and continues to use local MySQL when it does not. Hosted sessions are persisted in PostgreSQL.
+
+To create the PostgreSQL tables and seed demo records, set `DATABASE_URL_UNPOOLED` (preferred for setup) or `DATABASE_URL` in the ignored local `.env` file, then run `npm.cmd run db:setup:cloud`. The setup creates missing tables and only seeds when the app tables contain no data. It never drops tables or removes records. Demo logins use `customer@localprice.test`, `owner@localprice.test`, and `admin@localprice.test` with password `demo123`.
+
+When the configured database is unavailable, `/api/health` reports an unavailable status and database-backed operations return an error. The app does not silently switch to temporary in-memory catalogue data.
 
 ## Database commands
 
@@ -44,6 +50,7 @@ When MySQL is unavailable, `/api/health` reports an unavailable status and datab
 - `npm.cmd run db:setup` creates the database and schema safely, then ensures additive compatibility columns.
 - `npm.cmd run db:check` checks MySQL connectivity and schema presence without modifying records.
 - `npm.cmd run db:seed` inserts original demo data only into empty tables; it never overwrites existing data.
+- `npm.cmd run db:setup:cloud` safely creates the Neon/PostgreSQL schema and seeds demo records only if its application tables are empty.
 - `npm.cmd test` runs local diagnostics and, when `.env` is configured, an integration workflow covering registration, role authorization, store approval and edits, owner product/price management, comparison, and persistence after an Express restart. The integration test removes only records it created. If its MySQL workflow is skipped, it has not passed.
 
 ## Authentication character

@@ -7,7 +7,7 @@ const express = require('express');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
-const { initializeDatabase, getPool, isDatabaseReady, getDatabaseStatus } = require('./config/database');
+const { initializeDatabase, getPool, getNativePgPool, isDatabaseReady, getDatabaseStatus, usesPostgres } = require('./config/database');
 const { requireRole } = require('./middleware/auth');
 
 const app = express();
@@ -26,6 +26,16 @@ const productUploadDir = isVercelRuntime
   ? path.join(require('os').tmpdir(), 'localprice', 'uploads', 'products')
   : path.join(__dirname, 'public', 'uploads', 'products');
 fs.mkdirSync(productUploadDir, { recursive: true });
+
+const databaseInitialization = initializeDatabase();
+const pgPool = getNativePgPool();
+if (isVercelRuntime && usesPostgres() && pgPool) {
+  try { require('@vercel/functions').attachDatabasePool(pgPool); }
+  catch (error) { console.warn(`[LocalPrice PostgreSQL] Pool lifecycle integration unavailable [${error.code || 'load_error'}].`); }
+}
+const sessionStore = pgPool
+  ? new (require('connect-pg-simple')(session))({ pool: pgPool, createTableIfMissing: true, tableName: 'session' })
+  : undefined;
 
 const productUpload = multer({
   storage: multer.diskStorage({
@@ -63,6 +73,7 @@ function removeUploadedFile(file) {
 app.use(express.json({ limit: '100kb' }));
 app.use(express.urlencoded({ extended: false }));
 app.use(session({
+  ...(sessionStore ? { store: sessionStore } : {}),
   secret: process.env.SESSION_SECRET || 'localprice-development-secret',
   resave: false,
   saveUninitialized: false,
@@ -110,9 +121,9 @@ async function requireApprovedStore(req, res, next) {
 
 function formatError(res, error) {
   const code = String(error?.code || 'APPLICATION_ERROR');
-  if (['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ER_ACCESS_DENIED_ERROR', 'ER_BAD_DB_ERROR', 'ER_NO_SUCH_TABLE', 'ER_BAD_FIELD_ERROR'].includes(code)) {
-    console.warn(`[LocalPrice MySQL] ${code}`);
-    return res.status(503).json({ code: 'mysql_unavailable', message: 'Local MySQL is unavailable or its schema is incomplete. Run npm run db:check.' });
+  if (['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ER_ACCESS_DENIED_ERROR', 'ER_BAD_DB_ERROR', 'ER_NO_SUCH_TABLE', 'ER_BAD_FIELD_ERROR', '08000', '08003', '08006', '57P01'].includes(code)) {
+    console.warn(`[LocalPrice ${getDatabaseStatus().database}] ${error?.originalCode || code}`);
+    return res.status(503).json({ code: `${getDatabaseStatus().database}_unavailable`, message: 'The configured database is unavailable or its schema is incomplete.' });
   }
   console.error(`[LocalPrice request] ${code}`);
   return res.status(500).json({ message: 'Something went wrong. Please try again.' });
@@ -200,7 +211,7 @@ app.get('/api/products', async (req, res) => {
     const [[count]] = await getPool().query(`SELECT COUNT(*) AS total ${base}`, values);
     const offset = (page - 1) * limit;
     const [rows] = await getPool().query(`SELECT sp.listing_id, p.product_id, p.name, p.brand, p.description, p.image_key, p.image_url, c.category_id, c.name AS category, s.store_id, s.store_name, s.locality, s.address, s.phone, s.is_demo, sp.price, sp.is_available, sp.updated_at ${base} ORDER BY sp.price ${sortSql}, sp.updated_at DESC LIMIT ? OFFSET ?`, [...values, limit, offset]);
-    return res.json({ results: rows, total: count.total, page, pages: Math.ceil(count.total / limit), database: 'mysql' });
+    return res.json({ results: rows, total: count.total, page, pages: Math.ceil(count.total / limit), database: getDatabaseStatus().database });
   } catch (error) { return formatError(res, error); }
 });
 
@@ -512,14 +523,12 @@ app.use((error, req, res, next) => {
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-const databaseInitialization = initializeDatabase();
-
 if (!isVercelRuntime) {
   databaseInitialization.finally(() => {
     app.listen(PORT, () => {
       console.log(`LocalPrice is running at http://localhost:${PORT}`);
-      if (isDatabaseReady()) console.log('LocalPrice persistence: MySQL ready.');
-      else console.warn('LocalPrice persistence is unavailable. Run npm run db:check after configuring MySQL.');
+      if (isDatabaseReady()) console.log(`LocalPrice persistence: ${getDatabaseStatus().database} ready.`);
+      else console.warn(`LocalPrice persistence is unavailable. Configure ${usesPostgres() ? 'the hosted PostgreSQL schema' : 'local MySQL'} before using database-backed features.`);
     });
   });
 }

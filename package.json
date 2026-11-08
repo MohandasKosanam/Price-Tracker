@@ -9,6 +9,7 @@
     "db:provision": "node scripts/db-provision.js",
     "db:check": "node scripts/db-check.js",
     "db:setup": "node scripts/db-setup.js",
+    "db:setup:cloud": "node scripts/db-setup-cloud.js",
     "db:seed": "node scripts/db-seed.js",
     "seed:demo": "node scripts/db-seed.js",
     "glass:lab": "node development/glass-lab-server.js",
@@ -18,12 +19,15 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@vercel/functions": "^3.11.0",
     "bcryptjs": "^3.0.3",
+    "connect-pg-simple": "^10.0.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "express-session": "^1.18.1",
     "motion": "^14.9.0",
     "multer": "^2.5.0",
-    "mysql2": "^3.12.0"
+    "mysql2": "^3.12.0",
+    "pg": "^8.23.1"
   }
 }

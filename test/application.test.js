@@ -8,7 +8,7 @@ const path = require('node:path');
 const net = require('node:net');
 const crypto = require('node:crypto');
 const mysql = require('mysql2/promise');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 
 const projectRoot = path.resolve(__dirname, '..');
 const databaseConfigured = Boolean(process.env.DB_HOST && process.env.DB_USER && process.env.DB_NAME);

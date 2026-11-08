@@ -13,6 +13,7 @@ const { requireRole } = require('./middleware/auth');
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const isProduction = process.env.NODE_ENV === 'production';
+const isVercelRuntime = Boolean(process.env.VERCEL);
 if (isProduction && !process.env.SESSION_SECRET) throw new Error('SESSION_SECRET is required in production.');
 const sessionTtlHours = Number(process.env.SESSION_TTL_HOURS || 8);
 if (!Number.isFinite(sessionTtlHours) || sessionTtlHours <= 0 || sessionTtlHours > 720) {
@@ -21,7 +22,9 @@ if (!Number.isFinite(sessionTtlHours) || sessionTtlHours <= 0 || sessionTtlHours
 const sessionMaxAgeMs = sessionTtlHours * 60 * 60 * 1000;
 const secureSessionCookie = isProduction || String(process.env.SESSION_COOKIE_SECURE || 'auto').toLowerCase() === 'true';
 if (isProduction) app.set('trust proxy', 1);
-const productUploadDir = path.join(__dirname, 'public', 'uploads', 'products');
+const productUploadDir = isVercelRuntime
+  ? path.join(require('os').tmpdir(), 'localprice', 'uploads', 'products')
+  : path.join(__dirname, 'public', 'uploads', 'products');
 fs.mkdirSync(productUploadDir, { recursive: true });
 
 const productUpload = multer({
@@ -41,9 +44,15 @@ const productUpload = multer({
 
 function parseProductUpload(req, res, next) {
   productUpload.single('image')(req, res, (error) => {
-    if (!error) return next();
-    if (req.file) fs.rmSync(req.file.path, { force: true });
-    return res.status(400).json({ message: error.code === 'LIMIT_FILE_SIZE' ? 'Product images must be 3MB or smaller.' : error.message });
+    if (error) {
+      if (req.file) fs.rmSync(req.file.path, { force: true });
+      return res.status(400).json({ message: error.code === 'LIMIT_FILE_SIZE' ? 'Product images must be 3MB or smaller.' : error.message });
+    }
+    if (isVercelRuntime && req.file) {
+      removeUploadedFile(req.file);
+      return res.status(503).json({ message: 'Product image uploads require persistent storage, which is not configured for this deployment.' });
+    }
+    return next();
   });
 }
 

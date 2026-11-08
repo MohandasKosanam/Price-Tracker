@@ -8,7 +8,9 @@ const state = {
   adminView: 'overview',
   ownerData: null,
   adminData: null,
-  pendingConfirm: null
+  pendingConfirm: null,
+  searchController: null,
+  searchRequest: 0
 };
 
 const $ = (selector, parent = document) => parent.querySelector(selector);
@@ -43,9 +45,26 @@ const productArtKey = (product = {}) => {
 };
 const productArtLabel = (product = {}, key = productArtKey(product)) => ({ pen: 'R', notebook: '▤', tea: 'tea', care: '+', bulb: '◌', pencil: 'HB' }[key] || String(product.name || 'P').trim().slice(0, 1).toUpperCase());
 const art = (key, label = '') => `<div class="product-art ${artClass(key)}"><span>${escapeHTML(label || productArtLabel({}, String(key).toLowerCase()))}</span></div>`;
-const productVisual = (product = {}, label = '', extraClass = '', id = '') => product.image_url ? `<div class="product-art product-photo ${extraClass}"${id ? ` id="${escapeHTML(id)}"` : ''}><img src="${escapeHTML(product.image_url)}" alt="${escapeHTML(product.name || 'Product image')}" loading="lazy"></div>` : `<div class="product-art ${artClass(productArtKey(product))} ${extraClass}"${id ? ` id="${escapeHTML(id)}"` : ''}><span>${escapeHTML(label || productArtLabel(product))}</span></div>`;
+const productPhotoFor = (product = {}) => {
+  if (product.image_url) return product.image_url;
+  const name = String(product.name || '').trim().toLocaleLowerCase();
+  const exactPhotos = {
+    'ball pen blue': '/images/products/pen.jpg',
+    'hb pencil pack': '/images/products/pencils.jpg',
+    'a4 notebook': '/images/products/notebook.jpg',
+    'pocket notebook': '/images/products/notebook.jpg',
+    'premium tea 250g': '/images/products/tea.jpg',
+    'hand wash 250ml': '/images/products/hand-wash.jpg',
+    'led bulb 9w': '/images/products/led-bulb.jpg'
+  };
+  return exactPhotos[name] || '';
+};
+const productVisual = (product = {}, label = '', extraClass = '', id = '') => {
+  const photo = productPhotoFor(product);
+  return photo ? `<div class="product-art product-photo ${extraClass}"${id ? ` id="${escapeHTML(id)}"` : ''}><img src="${escapeHTML(photo)}" alt="${escapeHTML(product.name || 'Product photo')}" loading="lazy" width="384" height="320"></div>` : `<div class="product-art ${artClass(productArtKey(product))} ${extraClass}"${id ? ` id="${escapeHTML(id)}"` : ''} aria-label="${escapeHTML(product.name || 'Product')} visual"><span>${escapeHTML(label || productArtLabel(product))}</span></div>`;
+};
 
-const authCatMarkup = `<div class="auth-cat" data-auth-cat data-mood="idle" aria-hidden="true"><span class="cat-spark cat-spark-one"></span><span class="cat-spark cat-spark-two"></span><svg viewBox="0 0 240 210" role="presentation"><path class="cat-tail" d="M184 161c28 7 38-10 27-25-7-9-18-8-22 1"/><ellipse class="cat-body" cx="121" cy="151" rx="53" ry="39"/><ellipse class="cat-belly" cx="121" cy="157" rx="31" ry="26"/><g class="cat-paw cat-paw-left"><ellipse cx="87" cy="170" rx="14" ry="22"/></g><g class="cat-paw cat-paw-right"><ellipse cx="155" cy="170" rx="14" ry="22"/></g><g class="cat-head"><path class="cat-ear cat-ear-left" d="M75 75 67 28c-1-7 6-11 11-6l30 29Z"/><path class="cat-ear cat-ear-right" d="m165 75 8-47c1-7-6-11-11-6l-30 29Z"/><path class="cat-ear-inner cat-ear-inner-left" d="m76 52-3-17 19 18Z"/><path class="cat-ear-inner cat-ear-inner-right" d="m164 52 3-17-19 18Z"/><ellipse class="cat-face" cx="120" cy="83" rx="49" ry="43"/><g class="cat-eye cat-eye-left"><ellipse cx="100" cy="82" rx="9" ry="7"/><circle cx="100" cy="82" r="3"/></g><g class="cat-eye cat-eye-right"><ellipse cx="140" cy="82" rx="9" ry="7"/><circle cx="140" cy="82" r="3"/></g><path class="cat-brow cat-brow-left" d="M91 67q9-7 18 0"/><path class="cat-brow cat-brow-right" d="M131 67q9-7 18 0"/><path class="cat-nose" d="m116 94 4 3 4-3-4-3Z"/><path class="cat-mouth" d="M120 97v5m0 0q-7 7-12 0m12 0q7 7 12 0"/><path class="cat-whiskers" d="M84 94 50 88m35 14-36 4m87-12 34-6m-35 14 36 4"/></g></svg></div>`;
+const authCatMarkup = `<div class="auth-cat" data-auth-cat data-cat-state="idle" aria-hidden="true"><canvas class="cat-composite" width="384" height="378"></canvas><video class="cat-video" muted playsinline preload="auto"></video><video class="cat-video" muted playsinline preload="none"></video><img class="cat-static-fallback" src="/images/cat/cat-static-fallback.png" alt=""></div>`;
 
 function prepareAuthUI() {
   const intro = $('.auth-intro');
@@ -72,6 +91,24 @@ async function api(url, options = {}) {
   return payload;
 }
 
+async function refreshDatabaseStatus() {
+  const banner = $('#database-status');
+  if (!banner) return;
+  try {
+    const response = await fetch('/api/health', { cache: 'no-store' });
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok && payload.status === 'ok') {
+      banner.classList.add('is-hidden');
+      banner.textContent = '';
+      return;
+    }
+    banner.textContent = `Database unavailable: ${payload.message || 'MySQL health check failed.'} Run npm run db:check in the project folder.`;
+  } catch {
+    banner.textContent = 'LocalPrice API is unreachable. Start the server with npm start after configuring local MySQL.';
+  }
+  banner.classList.remove('is-hidden');
+}
+
 function toast(message, type = 'success') {
   const item = document.createElement('div');
   item.className = `toast ${type === 'error' ? 'error' : ''}`;
@@ -83,8 +120,11 @@ function toast(message, type = 'success') {
 function setTheme(theme) {
   const next = theme || (document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
   document.documentElement.dataset.theme = next;
+  document.body.classList.add('theme-changing');
+  clearTimeout(document.body._themeTimer);
+  document.body._themeTimer = window.setTimeout(() => document.body.classList.remove('theme-changing'), matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 520);
   localStorage.setItem('localprice-theme', next);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', next === 'dark' ? '#151514' : '#c5e4ef');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', next === 'dark' ? '#09121e' : '#e8edf2');
   document.documentElement.dispatchEvent(new Event('themechange'));
   document.querySelectorAll('[data-theme-toggle]').forEach((button) => {
     button.querySelector('.theme-label').textContent = next === 'dark' ? 'Dark' : 'Light';
@@ -95,20 +135,198 @@ function setTheme(theme) {
 function openModal(id) {
   const modal = document.getElementById(id);
   if (!modal) return;
+  clearTimeout(modal._closeTimer);
+  modal.classList.remove('is-closing');
+  const alreadyOpen = $$('.modal-backdrop:not(.is-hidden)').at(-1);
+  modal._returnFocus = alreadyOpen ? null : document.activeElement;
   modal.classList.remove('is-hidden');
   modal.setAttribute('aria-hidden', 'false');
   document.body.classList.add('modal-open');
+  window.requestAnimationFrame(() => modal.querySelector('button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex="0"]')?.focus({ preventScroll: true }));
 }
 
 function closeModals() {
-  $$('.modal-backdrop').forEach((modal) => { modal.classList.add('is-hidden'); modal.setAttribute('aria-hidden', 'true'); });
+  const opened = $$('.modal-backdrop:not(.is-hidden)');
+  opened.forEach((modal) => {
+    modal.classList.add('is-closing');
+    modal.setAttribute('aria-hidden', 'true');
+    modal._closeTimer = window.setTimeout(() => { modal.classList.add('is-hidden'); modal.classList.remove('is-closing'); }, 160);
+  });
   document.body.classList.remove('modal-open');
-  setAuthCatMood('idle');
+  suspendAuthCat();
+  const returnFocus = opened[0]?._returnFocus;
+  if (returnFocus?.isConnected) window.requestAnimationFrame(() => returnFocus.focus({ preventScroll: true }));
 }
 
-function setAuthCatMood(mood = 'idle') {
+const catAnimation = Object.freeze({
+  idle: { file: 'cat-idle.mp4', priority: 0, loop: true },
+  curious: { file: 'cat-curious.mp4', priority: 1 },
+  blink: { file: 'cat-blink.mp4', priority: 2 },
+  focused: { file: 'cat-blink.mp4', priority: 2 },
+  peek: { file: 'cat-curious.mp4', priority: 2 },
+  shy: { file: 'cat-blink.mp4', priority: 2 },
+  happy: { file: 'cat-happy.mp4', priority: 3 },
+  concerned: { file: 'cat-concerned.mp4', priority: 3 },
+  submitting: { file: 'cat-curious.mp4', priority: 2 }
+});
+
+async function playCatVideo(cat, state, force = false) {
+  const controller = cat?._controller;
+  if (!controller) return;
+  const config = catAnimation[state];
+  if (!config) return;
+  if (controller.reduced.matches) return showCatFallback(cat, 'reduced');
+  if (!force && controller.state !== 'idle' && config.priority < controller.priority) return;
+  if (!force && controller.state === state && !controller.videos[controller.active].paused) return;
+  clearTimeout(controller.blinkTimer);
+  const request = ++controller.request;
+  controller.state = state;
+  controller.priority = config.priority;
+  cat.dataset.catState = state;
+  const nextIndex = controller.active === 0 ? 1 : 0;
+  const incoming = controller.videos[nextIndex];
+  const outgoing = controller.videos[controller.active];
+  incoming.pause();
+  incoming.loop = Boolean(config.loop);
+  incoming.muted = true;
+  incoming.playsInline = true;
+  incoming.src = `/images/cat/${config.file}`;
+  incoming.load();
+  try {
+    if (incoming.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Video load timed out')), 10000);
+        incoming.addEventListener('loadeddata', () => { clearTimeout(timeout); resolve(); }, { once: true });
+        incoming.addEventListener('error', () => { clearTimeout(timeout); reject(new Error('Video failed to load')); }, { once: true });
+      });
+    }
+    if (request !== controller.request) return;
+    await incoming.play();
+    if (request !== controller.request) { incoming.pause(); return; }
+    await startCatCompositing(cat, incoming, request);
+    if (request !== controller.request) { incoming.pause(); return; }
+    controller.fallback.classList.add('is-hidden');
+    controller.canvas.classList.add('is-active');
+    stopCatCompositing(outgoing);
+    outgoing.pause();
+    controller.active = nextIndex;
+    incoming.onended = () => {
+      incoming.onended = null;
+      if (request === controller.request && !config.loop) playCatVideo(cat, 'idle', true);
+    };
+    if (state === 'idle') scheduleCatBlink(cat, request);
+  } catch (error) {
+    if (request === controller.request) showCatFallback(cat, 'fallback');
+  }
+}
+
+function startCatCompositing(cat, video, request) {
+  const controller = cat._controller;
+  const { canvas, context } = controller;
+  if (!context) return Promise.reject(new Error('Canvas is unavailable'));
+  const width = canvas.width, height = canvas.height;
+  const draw = (resolveFirst) => {
+    if (request !== controller.request || video.paused || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+    const aspect = width / height;
+    const sourceHeight = Math.min(video.videoHeight, video.videoWidth / aspect);
+    const sourceWidth = sourceHeight * aspect;
+    const sx = (video.videoWidth - sourceWidth) / 2;
+    const sy = (video.videoHeight - sourceHeight) / 2;
+    context.drawImage(video, sx, sy, sourceWidth, sourceHeight, 0, 0, width, height);
+    const frame = context.getImageData(0, 0, width, height);
+    const pixels = frame.data;
+    const bgR = (pixels[0] + pixels[(width - 1) * 4] + pixels[((height - 1) * width) * 4] + pixels[(height * width - 1) * 4]) / 4;
+    const bgG = (pixels[1] + pixels[(width - 1) * 4 + 1] + pixels[((height - 1) * width) * 4 + 1] + pixels[(height * width - 1) * 4 + 1]) / 4;
+    const bgB = (pixels[2] + pixels[(width - 1) * 4 + 2] + pixels[((height - 1) * width) * 4 + 2] + pixels[(height * width - 1) * 4 + 2]) / 4;
+    for (let i = 0; i < pixels.length; i += 4) {
+      const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2];
+      const greenExcess = Math.min(g - r, g - b);
+      if (g > 48 && greenExcess > 14) {
+        const t = Math.max(0, Math.min(1, (greenExcess - 12) / 48));
+        const alpha = 1 - t;
+        if (alpha < .04) { pixels[i + 3] = 0; continue; }
+        pixels[i] = Math.max(0, Math.min(255, (r - bgR * (1 - alpha)) / alpha));
+        pixels[i + 1] = Math.max(0, Math.min(255, (g - bgG * (1 - alpha)) / alpha));
+        pixels[i + 2] = Math.max(0, Math.min(255, (b - bgB * (1 - alpha)) / alpha));
+        pixels[i + 3] = Math.round(alpha * 255);
+      }
+    }
+    context.putImageData(frame, 0, 0);
+    if (resolveFirst) resolveFirst();
+    const next = () => draw();
+    if (video.requestVideoFrameCallback) video._catRenderHandle = video.requestVideoFrameCallback(next);
+    else video._catRenderHandle = requestAnimationFrame(next);
+  };
+  return new Promise((resolve, reject) => {
+    let attempts = 0;
+    const wait = () => {
+      if (request !== controller.request) return reject(new Error('Video request superseded'));
+      if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth) return draw(resolve);
+      if (++attempts > 60) return reject(new Error('No video frame available'));
+      requestAnimationFrame(wait);
+    };
+    wait();
+  });
+}
+
+function stopCatCompositing(video) {
+  if (!video?._catRenderHandle) return;
+  if (video.cancelVideoFrameCallback) video.cancelVideoFrameCallback(video._catRenderHandle);
+  else cancelAnimationFrame(video._catRenderHandle);
+  video._catRenderHandle = 0;
+}
+
+function showCatFallback(cat, state = 'fallback') {
+  const controller = cat?._controller;
+  if (!controller) return;
+  ++controller.request;
+  clearTimeout(controller.blinkTimer);
+  controller.videos.forEach((video) => { stopCatCompositing(video); video.pause(); video.classList.remove('is-active'); });
+  controller.canvas.classList.remove('is-active');
+  controller.fallback.classList.remove('is-hidden');
+  controller.state = state;
+  cat.dataset.catState = state;
+}
+
+function suspendAuthCat() {
   const cat = $('[data-auth-cat]');
-  if (cat) cat.dataset.mood = mood;
+  const controller = cat?._controller;
+  if (!controller) return;
+  ++controller.request;
+  clearTimeout(controller.blinkTimer);
+  controller.videos.forEach((video) => video.pause());
+  controller.videos.forEach(stopCatCompositing);
+  controller.canvas.classList.remove('is-active');
+  controller.state = 'idle'; controller.priority = 0; cat.dataset.catState = 'idle';
+}
+
+function scheduleCatBlink(cat, idleRequest) {
+  const controller = cat._controller;
+  clearTimeout(controller.blinkTimer);
+  controller.blinkTimer = setTimeout(() => {
+    if (controller.request === idleRequest && controller.state === 'idle') playCatVideo(cat, 'blink');
+  }, 18000 + Math.random() * 12000);
+}
+
+function setAuthCatMood(mood = 'idle', force = false) {
+  const cat = $('[data-auth-cat]');
+  if (!cat?._controller) return;
+  if (mood === 'error' || mood === 'concerned') mood = 'concerned';
+  if (mood === 'success') mood = 'happy';
+  if (mood === 'email' || mood === 'password' || mood === 'focused' || mood === 'shy') mood = 'blink';
+  if (mood === 'looking') mood = 'focused';
+  playCatVideo(cat, mood in catAnimation ? mood : 'idle', force);
+}
+
+function setupAuthCat() {
+  const cat = $('[data-auth-cat]');
+  if (!cat) return;
+  const videos = [...cat.querySelectorAll('video')];
+  const canvas = cat.querySelector('.cat-composite');
+  cat._controller = { videos, canvas, context: canvas.getContext('2d', { willReadFrequently: true }), fallback: cat.querySelector('.cat-static-fallback'), active: 0, state: 'idle', priority: 0, request: 0, blinkTimer: 0, reduced: matchMedia('(prefers-reduced-motion: reduce)') };
+  videos.forEach((video) => { video.muted = true; video.playsInline = true; video.addEventListener('error', () => { if (cat._controller.state !== 'idle' || !video.src.endsWith('cat-idle.mp4')) showCatFallback(cat); }); });
+  cat._controller.reduced.addEventListener?.('change', (event) => { if (event.matches) showCatFallback(cat, 'reduced'); else playCatVideo(cat, 'idle', true); });
+  suspendAuthCat();
 }
 
 function setAuthFeedback(message = '', type = '') {
@@ -132,23 +350,21 @@ function setAuthLoading(form, loading) {
 function openAuth(mode = 'login') {
   openModal('auth-modal');
   setAuthFeedback();
-  switchAuthTab(mode === 'register-owner' ? 'register' : mode);
+  switchAuthTab(mode === 'register-owner' ? 'register' : mode, true);
+  setAuthCatMood('idle', true);
   if (mode === 'register-owner') {
     $('#register-role').value = 'shop_owner';
     $('#owner-fields').classList.remove('is-hidden');
   }
-  window.setTimeout(() => {
-    const activeForm = $('#auth-modal form:not(.is-hidden)');
-    activeForm?.querySelector('input, select')?.focus();
-  }, 120);
+  window.setTimeout(() => $('#auth-modal [data-close-modal]')?.focus(), 120);
 }
 
-function switchAuthTab(tab) {
+function switchAuthTab(tab, initializing = false) {
   $$('[data-auth-tab]').forEach((button) => button.classList.toggle('active', button.dataset.authTab === tab));
   $('#login-form').classList.toggle('is-hidden', tab !== 'login');
   $('#register-form').classList.toggle('is-hidden', tab !== 'register');
   setAuthFeedback();
-  setAuthCatMood(tab === 'login' ? 'idle' : 'register');
+  if (!initializing) setAuthCatMood(tab === 'login' ? 'idle' : 'curious', true);
 }
 
 function setAppVisibility(isApp) {
@@ -186,7 +402,22 @@ function appHeader(title, subtitle, search = true) {
 }
 
 function sideNav(items, active, kind) {
-  return `<aside class="side-nav"><p class="side-nav-title">${kind === 'owner' ? 'Store workspace' : kind === 'admin' ? 'Administration' : 'Your workspace'}</p>${items.map((item) => `<button class="side-link ${active === item.key ? 'active' : ''}" type="button" data-${kind}-view="${item.key}">${icon(item.icon)}<span>${item.label}</span></button>`).join('')}<div class="side-separator"></div><button class="side-link" type="button" data-logout>${icon('log-out')}<span>Log out</span></button></aside>`;
+  return `<aside class="side-nav"><p class="side-nav-title">${kind === 'owner' ? 'Store workspace' : kind === 'admin' ? 'Administration' : 'Your workspace'}</p><span class="nav-indicator" aria-hidden="true"></span>${items.map((item) => `<button class="side-link ${active === item.key ? 'active' : ''}" type="button" data-${kind}-view="${item.key}">${icon(item.icon)}<span>${item.label}</span></button>`).join('')}<div class="side-separator"></div><button class="side-link" type="button" data-logout>${icon('log-out')}<span>Log out</span></button></aside>`;
+}
+
+function positionNavIndicator(nav = $('.side-nav')) {
+  if (!nav) return;
+  const active = nav.querySelector('.side-link.active');
+  const indicator = nav.querySelector('.nav-indicator');
+  if (!active || !indicator) return;
+  const navRect = nav.getBoundingClientRect();
+  const rect = active.getBoundingClientRect();
+  const horizontal = matchMedia('(max-width: 760px)').matches;
+  indicator.style.width = `${rect.width}px`;
+  indicator.style.height = `${rect.height}px`;
+  indicator.style.transform = horizontal
+    ? `translate(${rect.left - navRect.left + nav.scrollLeft}px, 0)`
+    : `translate(0, ${rect.top - navRect.top + nav.scrollTop}px)`;
 }
 
 function renderApp() {
@@ -195,24 +426,24 @@ function renderApp() {
   const isSearch = state.route === 'search' || state.route === 'customer';
   if (isOwner) {
     $('#app-view').innerHTML = `${appHeader('Store workspace', 'Manage your local catalogue with clarity.')}<div class="app-layout">${sideNav([{ key: 'overview', icon: 'chart', label: 'Overview' }, { key: 'products', icon: 'box', label: 'My products' }, { key: 'add', icon: 'plus', label: 'Add product' }, { key: 'store', icon: 'store', label: 'My store' }], state.ownerView, 'owner')}<main class="app-main"><div class="app-content" id="owner-content"></div></main></div>`;
+    positionNavIndicator();
     loadOwnerView();
     return;
   }
   if (isAdmin) {
-    $('#app-view').innerHTML = `${appHeader('Admin console', 'Keep the LocalPrice marketplace reliable.')}<div class="app-layout">${sideNav([{ key: 'overview', icon: 'chart', label: 'Overview' }, { key: 'approvals', icon: 'store', label: 'Shop approvals' }, { key: 'products', icon: 'box', label: 'Products' }, { key: 'categories', icon: 'grid', label: 'Categories' }], state.adminView, 'admin')}<main class="app-main"><div class="app-content" id="admin-content"></div></main></div>`;
+    $('#app-view').innerHTML = `${appHeader('Admin console', 'Keep the LocalPrice marketplace reliable.')}<div class="app-layout">${sideNav([{ key: 'overview', icon: 'chart', label: 'Overview' }, { key: 'approvals', icon: 'store', label: 'Shop approvals' }, { key: 'products', icon: 'box', label: 'Products' }, { key: 'listings', icon: 'list', label: 'Listings' }, { key: 'categories', icon: 'grid', label: 'Categories' }, { key: 'users', icon: 'users', label: 'Accounts' }], state.adminView, 'admin')}<main class="app-main"><div class="app-content" id="admin-content"></div></main></div>`;
+    positionNavIndicator();
     loadAdminView();
     return;
   }
   $('#app-view').innerHTML = `${appHeader('Explore local prices', 'A clearer way to choose what to buy nearby.')}<div class="app-layout">${sideNav([{ key: 'search', icon: 'search', label: 'Compare prices' }, { key: 'customer', icon: 'clock', label: 'Recent searches' }], 'search', 'customer')}<main class="app-main"><div class="app-content" id="customer-content"></div></main></div>`;
+  positionNavIndicator();
   loadCustomerView();
 }
 
 async function loadCategories() {
   try { state.categories = (await api('/api/categories')).categories || []; } catch (error) { console.warn(error); }
 }
-
-let landingRows = [];
-let landingFeedIndex = 0;
 
 function landingProductCard(product, storeCount) {
   return `<article class="product-card" data-product-query="${escapeHTML(product.name)}" data-product-details='${escapeHTML(JSON.stringify(product))}'><div class="product-card-top">${productVisual(product)}<span class="availability-dot">Available</span></div><div class="product-card-body"><span class="card-kicker">${escapeHTML(product.brand)} · ${escapeHTML(product.category || 'Everyday')}</span><h3>${escapeHTML(product.name)}</h3><div class="product-card-meta"><strong>from ${shortMoney(product.price)}</strong><span>${storeCount} ${storeCount === 1 ? 'store' : 'stores'}</span></div></div></article>`;
@@ -221,7 +452,7 @@ function landingProductCard(product, storeCount) {
 function renderLandingFeed(items) {
   const feed = $('#market-feed');
   if (!feed || !items.length) return;
-  feed.innerHTML = `<div class="feed-heading"><span>Live activity</span><span><i></i> now</span></div>${items.slice(0, 3).map((item) => { const key = productArtKey(item); return `<div class="feed-item"><span class="feed-avatar ${artClass(key)}">${escapeHTML(productArtLabel(item, key))}</span><span><strong>${escapeHTML(item.name)} price found</strong><small>${escapeHTML(item.store_name)} · ${escapeHTML(item.locality)}</small></span><b>${shortMoney(item.price)}</b></div>`; }).join('')}`;
+  feed.innerHTML = `<div class="feed-heading"><span>Sample price listings</span><span>Store data</span></div>${items.slice(0, 3).map((item) => { const key = productArtKey(item); return `<div class="feed-item"><span class="feed-avatar ${artClass(key)}">${escapeHTML(productArtLabel(item, key))}</span><span><strong>${escapeHTML(item.name)} at ${escapeHTML(item.store_name)}</strong><small>${escapeHTML(item.locality)} · ${relativeDate(item.updated_at)}</small></span><b>${shortMoney(item.price)}</b></div>`; }).join('')}`;
 }
 
 function renderHeroLadder(items) {
@@ -233,17 +464,26 @@ function renderHeroLadder(items) {
 
 function renderLandingMarket(data) {
   const available = (data.results || []).filter((item) => item.is_available);
-  if (!available.length) return;
-  landingRows = available;
+  if (!available.length) {
+    const label = $('#hero-data-label'); if (label) label.textContent = 'No sample prices';
+    const feed = $('#market-feed'); if (feed) feed.innerHTML = '<div class="feed-heading"><span>Sample price listings</span><span>Store data</span></div><div class="feed-item"><span>No available listings yet. Try product search below.</span></div>';
+    return;
+  }
+  const isDemo = data.database === 'demo' || available.every((item) => item.is_demo);
+  const dataLabel = $('#hero-data-label'); if (dataLabel) dataLabel.textContent = isDemo ? 'Illustrative demo prices' : 'Nearby store prices';
+  const dataNote = $('#hero-data-note'); if (dataNote) dataNote.textContent = isDemo ? 'Fictional sample listings' : 'Submitted by local stores';
   const first = available[0];
-  const sameProduct = available.filter((item) => item.product_id === first.product_id).sort((a, b) => Number(a.price) - Number(b.price));
+  const comparisonLocality = String(first.locality || '').trim().toLocaleLowerCase();
+  const sameProduct = available.filter((item) => item.product_id === first.product_id && String(item.locality || '').trim().toLocaleLowerCase() === comparisonLocality).sort((a, b) => Number(a.price) - Number(b.price));
   const heroArt = $('#hero-product-art');
   if (heroArt) heroArt.outerHTML = productVisual(first, 'R', 'hero-product-art', 'hero-product-art');
   const name = $('#hero-product-name'); if (name) name.textContent = first.name;
-  const category = $('#hero-product-category'); if (category) category.textContent = `Popular today · ${first.category || 'Everyday'}`;
+  const category = $('#hero-product-category'); if (category) category.textContent = `Featured comparison · ${first.category || 'Everyday'}`;
   const meta = $('#hero-product-meta'); if (meta) meta.textContent = `${first.brand} · ${sameProduct.length} ${sameProduct.length === 1 ? 'store' : 'stores'} found`;
   const locality = $('#hero-locality'); if (locality) locality.textContent = first.locality || 'Nearby stores';
   const savings = $('#hero-savings'); if (savings) savings.textContent = sameProduct.length > 1 ? `${shortMoney(Number(sameProduct[sameProduct.length - 1].price) - Number(sameProduct[0].price))} saved` : 'best price found';
+  const priceDifference = $('#hero-price-difference'); if (priceDifference) priceDifference.textContent = sameProduct.length > 1 ? `${shortMoney(Number(sameProduct[sameProduct.length - 1].price) - Number(sameProduct[0].price))} range` : 'One store price';
+  const itemStoreCount = $('#hero-store-count'); if (itemStoreCount) itemStoreCount.textContent = String(new Set(sameProduct.map((item) => item.store_id)).size);
   renderHeroLadder(sameProduct);
   renderLandingFeed(available);
   const products = new Map();
@@ -252,21 +492,31 @@ function renderLandingMarket(data) {
   if (recent) recent.innerHTML = [...products.values()].slice(0, 3).map((item) => landingProductCard(item, available.filter((row) => row.product_id === item.product_id).length)).join('');
   const listings = $('#metric-listings'); if (listings) listings.textContent = data.total || available.length;
   const stores = $('#metric-stores'); if (stores) stores.textContent = new Set(available.map((item) => item.store_id)).size;
+  const localities = $('#metric-localities'); if (localities) localities.textContent = `Across ${new Set(available.map((item) => item.locality).filter(Boolean)).size} localities`;
   const savingsMetric = $('#metric-savings');
-  if (savingsMetric) { const grouped = [...products.keys()].map((id) => available.filter((item) => item.product_id === id).map((item) => Number(item.price))).filter((prices) => prices.length > 1).map((prices) => Math.max(...prices) - Math.min(...prices)); savingsMetric.textContent = grouped.length ? shortMoney(grouped.reduce((sum, value) => sum + value, 0) / grouped.length) : '—'; }
+  if (savingsMetric) {
+    const comparisons = new Map();
+    available.forEach((item) => {
+      const key = `${item.product_id}:${String(item.locality || '').trim().toLocaleLowerCase()}`;
+      const prices = comparisons.get(key) || [];
+      prices.push(Number(item.price));
+      comparisons.set(key, prices);
+    });
+    const spreads = [...comparisons.values()].filter((prices) => prices.length > 1).map((prices) => Math.max(...prices) - Math.min(...prices));
+    savingsMetric.textContent = spreads.length ? shortMoney(spreads.reduce((sum, value) => sum + value, 0) / spreads.length) : '—';
+  }
 }
 
 async function loadLandingMarket() {
   try {
     const data = await api('/api/products?availability=available&sort=low&limit=50');
     renderLandingMarket(data);
-    window.setInterval(() => {
-      if (!landingRows.length || !$('#market-feed')) return;
-      landingFeedIndex = (landingFeedIndex + 1) % landingRows.length;
-      const rotated = landingRows.slice(landingFeedIndex).concat(landingRows.slice(0, landingFeedIndex));
-      renderLandingFeed(rotated);
-    }, 9000);
-  } catch (error) { console.warn(error); }
+  } catch (error) {
+    console.warn(error);
+    const label = $('#hero-data-label'); if (label) label.textContent = 'Prices unavailable';
+    const note = $('#hero-data-note'); if (note) note.textContent = 'Try search again in a moment';
+    const feed = $('#market-feed'); if (feed) feed.innerHTML = `<div class="feed-heading"><span>Sample price listings</span><span>Unavailable</span></div><div class="feed-item"><span>${escapeHTML(error.message)} <button type="button" data-retry-market>Retry</button></span></div>`;
+  }
 }
 
 function setupRevealAnimations() {
@@ -304,22 +554,30 @@ function relativeDate(value) {
 async function loadCustomerView() {
   const target = $('#customer-content');
   if (!target) return;
-  target.innerHTML = `<div class="page-intro"><div><p class="eyebrow">Your local shortlist</p><h1>Compare with confidence.</h1><p>Find the right price, from a store that is close by.</p></div></div><form class="app-search" data-search-form><label class="search-field search-field-product">${icon('search')}<span class="sr-only">Product</span><input name="query" value="${escapeHTML(state.search.query)}" placeholder="Search by product or brand"></label><label class="search-field search-field-place">${icon('map-pin')}<span class="sr-only">Locality</span><input name="locality" value="${escapeHTML(state.search.locality)}" placeholder="Locality or pincode"></label><button class="button button-primary search-submit" type="submit">Compare prices ${icon('arrow-right', 'icon-small')}</button></form><div class="filter-bar">${categoryChips()}<div class="select-wrap"><select data-sort aria-label="Sort results"><option value="low" ${state.search.sort === 'low' ? 'selected' : ''}>Lowest price first</option><option value="high" ${state.search.sort === 'high' ? 'selected' : ''}>Highest price first</option></select>${icon('chevron-down')}</div></div><div id="results-area"><div class="empty-state"><div class="modal-icon"><span class="spinner"></span></div><h3>Finding nearby prices</h3><p>Checking the latest listings from local stores.</p></div></div>`;
+  target.innerHTML = `<div class="page-intro"><div><p class="eyebrow">Your local shortlist</p><h1>Compare with confidence.</h1><p>Find the right price, from a store that is close by.</p></div></div><form class="app-search" data-search-form><label class="search-field search-field-product">${icon('search')}<span class="sr-only">Product</span><input name="query" value="${escapeHTML(state.search.query)}" placeholder="Search by product or brand"></label><label class="search-field search-field-place">${icon('map-pin')}<span class="sr-only">Locality</span><input name="locality" value="${escapeHTML(state.search.locality)}" placeholder="Locality or pincode"></label><button class="button button-primary search-submit" type="submit">Compare prices ${icon('arrow-right', 'icon-small')}</button></form><div class="filter-bar">${categoryChips()}<div class="select-wrap"><select data-sort aria-label="Sort results"><option value="low" ${state.search.sort === 'low' ? 'selected' : ''}>Lowest price first</option><option value="high" ${state.search.sort === 'high' ? 'selected' : ''}>Highest price first</option></select>${icon('chevron-down')}</div></div><div id="results-area" aria-live="polite"><div class="comparison-skeletons" role="status" aria-label="Loading nearby prices">${Array.from({ length: 3 }, () => '<div class="comparison-skeleton"><span></span><span></span><span></span><i></i></div>').join('')}</div></div>`;
   await queryResults();
 }
 
 async function queryResults() {
   const target = $('#results-area');
   if (!target) return;
+  state.searchController?.abort();
+  const controller = new AbortController();
+  state.searchController = controller;
+  const requestId = ++state.searchRequest;
   target.classList.add('loading');
   try {
     const params = new URLSearchParams({ query: state.search.query, locality: state.search.locality, category: state.search.category, availability: state.search.availability, sort: state.search.sort, page: state.search.page });
-    const data = await api(`/api/products?${params}`);
+    const data = await api(`/api/products?${params}`, { signal: controller.signal });
+    if (requestId !== state.searchRequest) return;
     const best = data.results.filter((item) => item.is_available).reduce((lowest, item) => Math.min(lowest, Number(item.price)), Infinity);
     const pagination = data.pages > 1 ? `<div class="pagination"><button class="icon-button" type="button" data-search-page="${data.page - 1}" ${data.page <= 1 ? 'disabled' : ''} aria-label="Previous page">${icon('arrow-left')}</button><span>Page ${data.page} of ${data.pages}</span><button class="icon-button" type="button" data-search-page="${data.page + 1}" ${data.page >= data.pages ? 'disabled' : ''} aria-label="Next page">${icon('arrow-right')}</button></div>` : '';
     target.innerHTML = `<div class="results-summary"><h2>${data.total ? `${data.total} ${data.total === 1 ? 'listing' : 'listings'} found` : 'No listings found'}</h2><span>${state.search.locality ? `Showing stores near ${escapeHTML(state.search.locality)}` : 'Showing approved local store listings'}</span></div>${data.results.length ? `<div class="comparison-list">${data.results.map((item) => productRow(item, best)).join('')}</div>${pagination}` : `<div class="empty-state"><div class="modal-icon">${icon('search')}</div><h3>Nothing matched this search.</h3><p>Try a broader product name or another locality. New listings are added regularly.</p><button class="button button-quiet" type="button" data-clear-search>Clear filters</button></div>`}`;
-  } catch (error) { target.innerHTML = `<div class="empty-state"><div class="modal-icon">${icon('info')}</div><h3>Could not load prices</h3><p>${escapeHTML(error.message)}</p><button class="button button-quiet" type="button" data-retry-search>Try again</button></div>`; }
-  target.classList.remove('loading');
+  } catch (error) {
+    if (error.name !== 'AbortError' && requestId === state.searchRequest) target.innerHTML = `<div class="empty-state"><div class="modal-icon">${icon('info')}</div><h3>Could not load prices</h3><p>${escapeHTML(error.message)}</p><button class="button button-quiet" type="button" data-retry-search>Try again</button></div>`;
+  } finally {
+    if (requestId === state.searchRequest) target.classList.remove('loading');
+  }
 }
 
 function dashboardStat(label, value, foot, iconName, positive = false) {
@@ -384,6 +642,8 @@ async function loadAdminView() {
     if (state.adminView === 'approvals') target.innerHTML = adminApprovals(state.adminData);
     if (state.adminView === 'products') target.innerHTML = adminProducts(state.adminData);
     if (state.adminView === 'categories') target.innerHTML = adminCategories(state.adminData);
+    if (state.adminView === 'users') target.innerHTML = adminUsers(state.adminData);
+    if (state.adminView === 'listings') target.innerHTML = adminListings(state.adminData);
   } catch (error) { target.innerHTML = `<div class="empty-state"><div class="modal-icon">${icon('info')}</div><h3>Admin console unavailable</h3><p>${escapeHTML(error.message)}</p></div>`; }
 }
 
@@ -403,11 +663,21 @@ function adminApprovals(data) {
 }
 
 function adminCategories(data) {
-  return `${adminIntro('Catalogue structure', 'Categories.', 'Keep the central catalogue easy for customers and stores to browse.')}<section class="dashboard-panel"><div class="panel-heading"><h2>Product categories</h2><span class="muted-small">${data.categories.length} active categories</span></div><div class="category-list">${data.categories.map((category) => `<div class="category-list-item"><span><strong>${escapeHTML(category.name)}</strong><small>${escapeHTML(category.description || 'No description')}</small></span><button class="icon-button" type="button" data-edit-category="${category.category_id}" data-category-name="${escapeHTML(category.name)}" aria-label="Edit category">${icon('edit')}</button></div>`).join('')}</div></section>`;
+  return `${adminIntro('Catalogue structure', 'Categories.', 'Keep the central catalogue easy for customers and stores to browse.')}<section class="form-panel admin-create-panel"><h2>Add a category</h2><p>Use a clear name and short browsing description.</p><form data-admin-category-form class="admin-create-form"><label>Category name<input name="name" maxlength="80" required></label><label>Description<input name="description" maxlength="255"></label><button class="button button-primary" type="submit">Add category</button></form></section><section class="dashboard-panel"><div class="panel-heading"><h2>Product categories</h2><span class="muted-small">${data.categories.length} categories</span></div><div class="category-list">${data.categories.map((category) => { const count = (data.products || []).filter((product) => Number(product.category_id) === Number(category.category_id)).length; return `<div class="category-list-item"><span><strong>${escapeHTML(category.name)}</strong><small>${escapeHTML(category.description || 'No description')} · ${count} ${count === 1 ? 'product' : 'products'}</small></span><div class="table-actions"><button class="icon-button" type="button" data-edit-category="${category.category_id}" data-category-name="${escapeHTML(category.name)}" aria-label="Edit category">${icon('edit')}</button><button class="icon-button" type="button" data-delete-category="${category.category_id}" data-category-name="${escapeHTML(category.name)}" aria-label="Delete category">${icon('trash')}</button></div></div>`; }).join('')}</div></section>`;
 }
 
 function adminProducts(data) {
-  return `${adminIntro('Central catalogue', 'Products.', 'Review the product information shared across local stores.')}<div class="table-wrap"><table class="data-table"><thead><tr><th>Product</th><th>Brand</th><th>Category</th><th>Description</th></tr></thead><tbody>${(data.products || []).map((product) => `<tr><td><div class="table-product">${productVisual(product)}<div><strong>${escapeHTML(product.name)}</strong><small>Product #${product.product_id}</small></div></div></td><td>${escapeHTML(product.brand)}</td><td>${escapeHTML(product.category)}</td><td class="description-cell">${escapeHTML(product.description || 'No description added')}</td></tr>`).join('')}</tbody></table></div>`;
+  return `${adminIntro('Central catalogue', 'Products.', 'Maintain shared product names, brands, descriptions, and categories.')}<section class="form-panel admin-create-panel"><h2>Add a product</h2><p>New catalogue entries are available to shop owners for listing.</p><form data-admin-product-form class="admin-product-form"><label>Product name<input name="name" maxlength="160" required></label><label>Brand<input name="brand" maxlength="100" required></label><label>Category<select name="categoryId" required>${(data.categories || []).map((category) => `<option value="${category.category_id}">${escapeHTML(category.name)}</option>`).join('')}</select></label><label>Unit / quantity<input name="unit" maxlength="80" placeholder="e.g. 250 g"></label><label class="admin-photo-field">Product photo<input name="image" type="file" accept="image/*" data-admin-product-image><small>Optional · JPEG, PNG, WebP, max 3 MB</small></label><label class="admin-product-description">Description<textarea name="description" maxlength="1000" rows="2"></textarea></label><button class="button button-primary" type="submit">Add product</button></form></section><div class="table-wrap"><table class="data-table"><thead><tr><th>Product</th><th>Brand</th><th>Category</th><th>Description</th><th>Action</th></tr></thead><tbody>${(data.products || []).map((product) => `<tr><td><div class="table-product">${productVisual(product)}<div><strong>${escapeHTML(product.name)}</strong><small>Product #${product.product_id}${product.unit ? ` · ${escapeHTML(product.unit)}` : ''}</small></div></div></td><td>${escapeHTML(product.brand)}</td><td>${escapeHTML(product.category)}</td><td class="description-cell">${escapeHTML(product.description || 'No description added')}</td><td><div class="table-actions"><button class="button button-quiet" type="button" data-edit-product="${product.product_id}">Edit</button><button class="icon-button" type="button" data-delete-product="${product.product_id}" aria-label="Delete ${escapeHTML(product.name)}" title="Delete when no store listings use this product">${icon('trash')}</button></div></td></tr>`).join('')}</tbody></table></div>`;
+}
+
+function adminListings(data) {
+  const listings = data.listings || [];
+  return `${adminIntro('Marketplace activity', 'Store listings.', 'Monitor the prices and availability submitted across approved stores.')}<div class="table-wrap"><table class="data-table"><thead><tr><th>Product</th><th>Store</th><th>Locality</th><th>Price</th><th>Availability</th><th>Updated</th></tr></thead><tbody>${listings.map((item) => `<tr><td><strong>${escapeHTML(item.product_name)}</strong><small>${escapeHTML(item.brand)}</small></td><td>${escapeHTML(item.store_name)}</td><td>${escapeHTML(item.locality)}</td><td>${shortMoney(item.price)}</td><td><span class="badge ${item.is_available ? 'badge-success' : 'badge-warning'}">${item.is_available ? 'available' : 'out of stock'}</span></td><td>${relativeDate(item.updated_at)}</td></tr>`).join('') || '<tr><td colspan="6">No store listings yet.</td></tr>'}</tbody></table></div>`;
+}
+
+function adminUsers(data) {
+  const users = data.users || [];
+  return `${adminIntro('Account access', 'People and permissions.', 'Review account status and suspend or restore access.')}<div class="table-wrap"><table class="data-table"><thead><tr><th>Account</th><th>Role</th><th>Phone</th><th>Status</th><th>Action</th></tr></thead><tbody>${users.map((user) => { const active = user.is_active !== false; const self = Number(user.user_id) === Number(state.user?.user_id); return `<tr><td><strong>${escapeHTML(user.full_name)}</strong><small>${escapeHTML(user.email)}</small></td><td>${escapeHTML(user.role.replace('_', ' '))}</td><td>${escapeHTML(user.phone || '—')}</td><td><span class="badge ${active ? 'badge-success' : 'badge-danger'}">${active ? 'active' : 'inactive'}</span></td><td><button class="button button-quiet" type="button" data-user-status="${user.user_id}" data-active="${!active}" ${self ? 'disabled title="You cannot deactivate your own administrator account."' : ''}>${active ? 'Deactivate' : 'Activate'}</button></td></tr>`; }).join('')}</tbody></table></div>`;
 }
 
 function openConfirm(title, message, action, callback) {
@@ -435,6 +705,8 @@ async function handleLogin(form) {
   try {
     const data = await api('/api/auth/login', { method: 'POST', body: JSON.stringify(values) });
     state.user = data.user;
+    setAuthCatMood('success');
+    await new Promise((resolve) => setTimeout(resolve, 1100));
     closeModals();
     toast(data.message);
     go(state.user.role === 'shop_owner' ? 'owner' : state.user.role === 'admin' ? 'admin' : 'customer');
@@ -456,6 +728,8 @@ async function handleRegister(form) {
   try {
     const data = await api('/api/auth/register', { method: 'POST', body: JSON.stringify(values) });
     state.user = data.user;
+    setAuthCatMood('happy');
+    await new Promise((resolve) => setTimeout(resolve, 1100));
     closeModals();
     toast(data.message);
     go(state.user.role === 'shop_owner' ? 'owner' : 'customer');
@@ -506,10 +780,61 @@ async function approveStore(id, status) {
   try { const data = await api(`/api/admin/stores/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }); toast(data.message); loadAdminView(); } catch (error) { toast(error.message, 'error'); }
 }
 
+async function updateUserStatus(id, isActive) {
+  try { const data = await api(`/api/admin/users/${id}/status`, { method: 'PATCH', body: JSON.stringify({ isActive }) }); toast(data.message); loadAdminView(); } catch (error) { toast(error.message, 'error'); }
+}
+
+async function editAdminProduct(id) {
+  const product = state.adminData?.products?.find((item) => Number(item.product_id) === Number(id));
+  if (!product) return;
+  const categories = state.adminData.categories || state.categories;
+  $('#admin-editor-content').innerHTML = `<p class="eyebrow">Central catalogue</p><h2 id="admin-editor-title">Edit product</h2><form data-admin-editor="product" data-id="${product.product_id}" class="admin-editor-form"><label>Product name<input name="name" maxlength="160" value="${escapeHTML(product.name)}" required></label><label>Brand<input name="brand" maxlength="100" value="${escapeHTML(product.brand)}" required></label><label>Category<select name="categoryId" required>${categories.map((category) => `<option value="${category.category_id}" ${Number(category.category_id) === Number(product.category_id) ? 'selected' : ''}>${escapeHTML(category.name)}</option>`).join('')}</select></label><label>Unit / quantity<input name="unit" maxlength="80" value="${escapeHTML(product.unit || '')}" placeholder="e.g. 250 g"></label><label>Replace product photo<input name="image" type="file" accept="image/*" data-admin-product-image><small>Optional · JPEG, PNG, WebP, max 3 MB</small></label><label>Description<textarea name="description" maxlength="1000" rows="3">${escapeHTML(product.description || '')}</textarea></label><div class="modal-actions"><button type="button" class="button button-quiet" data-close-modal>Cancel</button><button type="submit" class="button button-primary">Save changes</button></div></form>`;
+  openModal('admin-editor-modal');
+}
+
 async function editCategory(id, currentName) {
-  const name = window.prompt('Category name', currentName);
-  if (!name || name.trim() === currentName) return;
-  try { const data = await api(`/api/admin/categories/${id}`, { method: 'PATCH', body: JSON.stringify({ name: name.trim() }) }); toast(data.message); loadAdminView(); } catch (error) { toast(error.message, 'error'); }
+  const category = state.adminData?.categories?.find((item) => Number(item.category_id) === Number(id));
+  $('#admin-editor-content').innerHTML = `<p class="eyebrow">Catalogue structure</p><h2 id="admin-editor-title">Edit category</h2><form data-admin-editor="category" data-id="${id}" class="admin-editor-form"><label>Category name<input name="name" maxlength="80" value="${escapeHTML(currentName)}" required></label><label>Description<input name="description" maxlength="255" value="${escapeHTML(category?.description || '')}"></label><div class="modal-actions"><button type="button" class="button button-quiet" data-close-modal>Cancel</button><button type="submit" class="button button-primary">Save changes</button></div></form>`;
+  openModal('admin-editor-modal');
+}
+
+async function saveAdminEdit(form) {
+  const type = form.dataset.adminEditor;
+  const formData = new FormData(form);
+  const values = type === 'category' ? Object.fromEntries(formData) : formData;
+  if (type === 'product') values.set('categoryId', String(Number(values.get('categoryId'))));
+  try {
+    const data = await api(`/api/admin/${type === 'product' ? 'products' : 'categories'}/${form.dataset.id}`, { method: 'PATCH', body: type === 'product' ? values : JSON.stringify(values) });
+    closeModals(); toast(data.message);
+    if (type === 'category') await loadCategories();
+    loadAdminView();
+  } catch (error) { toast(error.message, 'error'); }
+}
+
+async function saveAdminCategory(form) {
+  const values = Object.fromEntries(new FormData(form));
+  try { const data = await api('/api/admin/categories', { method: 'POST', body: JSON.stringify(values) }); toast(data.message); await loadCategories(); loadAdminView(); }
+  catch (error) { toast(error.message, 'error'); }
+}
+
+async function saveAdminProduct(form) {
+  const values = new FormData(form);
+  try { const data = await api('/api/admin/products', { method: 'POST', body: values }); toast(data.message); loadAdminView(); }
+  catch (error) { toast(error.message, 'error'); }
+}
+
+function confirmCategoryDelete(id, name) {
+  openConfirm(`Delete ${name}?`, 'Categories with products cannot be removed. Move or remove their products first.', 'Delete category', async () => {
+    try { const data = await api(`/api/admin/categories/${id}`, { method: 'DELETE' }); closeModals(); toast(data.message); await loadCategories(); loadAdminView(); }
+    catch (error) { closeModals(); toast(error.message, 'error'); }
+  });
+}
+
+function confirmProductDelete(id, name) {
+  openConfirm(`Delete ${name}?`, 'Products with store listings cannot be removed. The listing relationship will be checked before deletion.', 'Delete product', async () => {
+    try { const data = await api(`/api/admin/products/${id}`, { method: 'DELETE' }); closeModals(); toast(data.message); loadAdminView(); }
+    catch (error) { closeModals(); toast(error.message, 'error'); }
+  });
 }
 
 async function logout() {
@@ -523,7 +848,7 @@ async function logout() {
 
 document.addEventListener('click', async (event) => {
   const auth = event.target.closest('[data-auth]');
-  if (auth) { openAuth(auth.dataset.auth); return; }
+  if (auth) { $('.public-links')?.classList.remove('open'); openAuth(auth.dataset.auth); return; }
   const backdrop = event.target.closest('.modal-backdrop');
   if (backdrop && event.target === backdrop) { closeModals(); return; }
   const close = event.target.closest('[data-close-modal]');
@@ -553,13 +878,15 @@ document.addEventListener('click', async (event) => {
   const composerMode = event.target.closest('[data-composer-mode]');
   if (composerMode) { state.ownerAddMode = composerMode.dataset.composerMode; loadOwnerView(); return; }
   const adminView = event.target.closest('[data-admin-view]');
-  if (adminView) { state.adminView = adminView.dataset.adminView; loadAdminView(); return; }
+  if (adminView) { state.adminView = adminView.dataset.adminView; $$('.side-nav [data-admin-view]').forEach((item) => item.classList.toggle('active', item.dataset.adminView === state.adminView)); positionNavIndicator(); loadAdminView(); return; }
   const customerView = event.target.closest('[data-customer-view]');
   if (customerView) { state.route = customerView.dataset.customerView; loadCustomerView(); return; }
   const clear = event.target.closest('[data-clear-search]');
   if (clear) { state.search = { query: '', locality: '', category: '', availability: 'available', sort: 'low', page: 1 }; loadCustomerView(); return; }
   const retry = event.target.closest('[data-retry-search]');
   if (retry) { queryResults(); return; }
+  const retryMarket = event.target.closest('[data-retry-market]');
+  if (retryMarket) { loadLandingMarket(); return; }
   const searchPage = event.target.closest('[data-search-page]');
   if (searchPage && !searchPage.disabled) { state.search.page = Number(searchPage.dataset.searchPage); queryResults(); return; }
   const details = event.target.closest('[data-store-details]');
@@ -568,14 +895,22 @@ document.addEventListener('click', async (event) => {
   if (edit) { editListing(edit.dataset.editListing); return; }
   const remove = event.target.closest('[data-delete-listing]');
   if (remove) { deleteListing(remove.dataset.deleteListing); return; }
+  const signOut = event.target.closest('[data-logout]');
+  if (signOut) { openConfirm('Sign out of LocalPrice?', 'Your saved session will be closed on this device.', 'Sign out', logout); return; }
   const approve = event.target.closest('[data-approve-store]');
   if (approve) { approveStore(approve.dataset.approveStore, approve.dataset.status); return; }
+  const userStatus = event.target.closest('[data-user-status]');
+  if (userStatus) { updateUserStatus(userStatus.dataset.userStatus, userStatus.dataset.active === 'true'); return; }
+  const productEdit = event.target.closest('[data-edit-product]');
+  if (productEdit) { editAdminProduct(productEdit.dataset.editProduct); return; }
+  const productDelete = event.target.closest('[data-delete-product]');
+  if (productDelete) { const product = state.adminData?.products?.find((item) => Number(item.product_id) === Number(productDelete.dataset.deleteProduct)); confirmProductDelete(productDelete.dataset.deleteProduct, product?.name || 'this product'); return; }
   const categoryEdit = event.target.closest('[data-edit-category]');
   if (categoryEdit) { editCategory(categoryEdit.dataset.editCategory, categoryEdit.dataset.categoryName); return; }
-  const demo = event.target.closest('[data-demo-login]');
-  if (demo) { $('#login-form [name=email]').value = `${demo.dataset.demoLogin}@localprice.test`; $('#login-form [name=password]').value = 'demo123'; setAuthFeedback(); setAuthCatMood('password'); $('#login-form [name=password]')?.focus(); return; }
+  const categoryDelete = event.target.closest('[data-delete-category]');
+  if (categoryDelete) { confirmCategoryDelete(categoryDelete.dataset.deleteCategory, categoryDelete.dataset.categoryName); return; }
   const password = event.target.closest('[data-toggle-password]');
-  if (password) { const input = password.parentElement.querySelector('input'); input.type = input.type === 'password' ? 'text' : 'password'; const visible = input.type === 'text'; password.textContent = visible ? 'Hide' : 'Show'; password.setAttribute('aria-label', visible ? 'Hide password' : 'Show password'); setAuthCatMood(visible ? 'peek' : 'password'); return; }
+  if (password) { const input = password.parentElement.querySelector('input'); input.type = input.type === 'password' ? 'text' : 'password'; const visible = input.type === 'text'; password.textContent = visible ? 'Hide' : 'Show'; password.setAttribute('aria-label', visible ? 'Hide password' : 'Show password'); setAuthCatMood('curious', true); return; }
   const userMenu = event.target.closest('[data-user-menu]');
   if (userMenu) { if (state.user) { openConfirm('Sign out of LocalPrice?', 'Your saved session will be closed on this device.', 'Sign out', logout); } else openAuth('login'); return; }
 });
@@ -583,8 +918,7 @@ document.addEventListener('click', async (event) => {
 document.addEventListener('focusin', (event) => {
   const authField = event.target.closest('#auth-modal input, #auth-modal select');
   if (!authField) return;
-  if (authField.name === 'password') setAuthCatMood(authField.type === 'text' ? 'peek' : 'password');
-  else setAuthCatMood('idle');
+  if (authField.name === 'password' || authField.name === 'email') setAuthCatMood(authField.type === 'text' ? 'curious' : 'blink');
 });
 
 document.addEventListener('input', (event) => {
@@ -592,7 +926,7 @@ document.addEventListener('input', (event) => {
   if (!authField) return;
   if ($('#login-form')?.contains(authField)) {
     setAuthFeedback();
-    setAuthCatMood(authField.name === 'password' ? (authField.type === 'text' ? 'peek' : 'password') : 'typing');
+    setAuthCatMood(authField.name === 'password' && authField.type === 'text' ? 'curious' : 'blink');
   }
 });
 
@@ -610,11 +944,21 @@ document.addEventListener('submit', async (event) => {
   if (event.target.matches('[data-owner-add-form]')) { event.preventDefault(); await saveOwnerListing(event.target); }
   if (event.target.matches('[data-owner-custom-form]')) { event.preventDefault(); await saveCustomProduct(event.target); }
   if (event.target.matches('[data-store-form]')) { event.preventDefault(); await updateStore(event.target); }
+  if (event.target.matches('[data-admin-category-form]')) { event.preventDefault(); await saveAdminCategory(event.target); }
+  if (event.target.matches('[data-admin-product-form]')) { event.preventDefault(); await saveAdminProduct(event.target); }
+  if (event.target.matches('[data-admin-editor]')) { event.preventDefault(); await saveAdminEdit(event.target); }
 });
 
 document.addEventListener('change', (event) => {
   if (event.target.matches('#register-role')) $('#owner-fields').classList.toggle('is-hidden', event.target.value !== 'shop_owner');
   if (event.target.matches('[data-sort]')) { state.search.sort = event.target.value; queryResults(); }
+  if (event.target.matches('[data-admin-product-image]')) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) { event.target.value = ''; toast('Choose an image smaller than 3MB.', 'error'); return; }
+    const note = event.target.parentElement.querySelector('small');
+    if (note) note.textContent = file.name;
+  }
   if (event.target.matches('[data-category-filter]')) { state.search.category = event.target.dataset.categoryFilter; loadCustomerView(); }
   if (event.target.matches('[data-product-image]')) {
     const file = event.target.files?.[0];
@@ -627,6 +971,17 @@ document.addEventListener('change', (event) => {
   }
 });
 
+document.addEventListener('error', (event) => {
+  const image = event.target;
+  if (!(image instanceof HTMLImageElement) || !image.closest('.product-photo')) return;
+  const product = { name: image.alt || 'Product', category: '' };
+  const fallback = document.createElement('div');
+  fallback.className = `product-art ${artClass(productArtKey(product))}`;
+  fallback.setAttribute('aria-label', image.alt || 'Product photo unavailable');
+  fallback.innerHTML = `<span>${escapeHTML(productArtLabel(product))}</span>`;
+  image.closest('.product-photo').replaceWith(fallback);
+}, true);
+
 document.addEventListener('keydown', (event) => {
   if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('[data-product-details][role="button"]')) {
     event.preventDefault(); openProductDetails(JSON.parse(event.target.dataset.productDetails));
@@ -634,13 +989,25 @@ document.addEventListener('keydown', (event) => {
 });
 
 $('#confirm-action').addEventListener('click', () => { if (state.pendingConfirm) state.pendingConfirm(); });
-document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeModals(); });
+document.addEventListener('keydown', (event) => {
+  const modal = $$('.modal-backdrop:not(.is-hidden)').at(-1);
+  if (event.key === 'Escape' && modal) { closeModals(); return; }
+  if (event.key !== 'Tab' || !modal) return;
+  const focusable = [...modal.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')].filter((element) => element.getClientRects().length);
+  if (!focusable.length) return;
+  if (event.shiftKey && document.activeElement === focusable[0]) { event.preventDefault(); focusable.at(-1).focus(); }
+  else if (!event.shiftKey && document.activeElement === focusable.at(-1)) { event.preventDefault(); focusable[0].focus(); }
+});
+window.addEventListener('resize', () => positionNavIndicator());
 window.addEventListener('hashchange', renderRoute);
 
 prepareAuthUI();
+setupAuthCat();
 
 (async function init() {
   setTheme(document.documentElement.dataset.theme);
+  refreshDatabaseStatus();
+  window.setInterval(refreshDatabaseStatus, 15000);
   try { state.user = (await api('/api/auth/me')).user; } catch (error) { console.warn(error); }
   await loadCategories();
   renderRoute();

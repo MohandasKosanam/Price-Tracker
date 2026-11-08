@@ -1,12 +1,12 @@
 USE localprice;
 
 INSERT INTO Users (user_id, full_name, email, password_hash, role, phone) VALUES
-(1, 'Aarav Mehta', 'customer@localprice.test', '$2b$10$QZ3y8V/ZQxAz4lILyc6jXeqjzDhkTLLa4WFMEEQghEQRqkKFQy8WK', 'customer', '9876543210'),
-(2, 'Neha Kulkarni', 'owner@localprice.test', '$2b$10$QZ3y8V/ZQxAz4lILyc6jXeqjzDhkTLLa4WFMEEQghEQRqkKFQy8WK', 'shop_owner', '9876501234'),
-(3, 'LocalPrice Admin', 'admin@localprice.test', '$2b$10$QZ3y8V/ZQxAz4lILyc6jXeqjzDhkTLLa4WFMEEQghEQRqkKFQy8WK', 'admin', '9876500000'),
-(4, 'Sri Sai Owner', 'srisai@localprice.test', '$2b$10$QZ3y8V/ZQxAz4lILyc6jXeqjzDhkTLLa4WFMEEQghEQRqkKFQy8WK', 'shop_owner', '9876511122'),
-(5, 'Krishna Owner', 'krishna@localprice.test', '$2b$10$QZ3y8V/ZQxAz4lILyc6jXeqjzDhkTLLa4WFMEEQghEQRqkKFQy8WK', 'shop_owner', '9876522233'),
-(6, 'Green Basket Owner', 'greenbasket@localprice.test', '$2b$10$QZ3y8V/ZQxAz4lILyc6jXeqjzDhkTLLa4WFMEEQghEQRqkKFQy8WK', 'shop_owner', '9876533344')
+(1, 'Aarav Mehta', 'customer@localprice.test', '$2b$10$L4HFVZCZ5wp8sDAxxV.d5.31pQ1QgVr4mxhIro5qDhorBivVjkwLi', 'customer', '9876543210'),
+(2, 'Neha Kulkarni', 'owner@localprice.test', '$2b$10$L4HFVZCZ5wp8sDAxxV.d5.31pQ1QgVr4mxhIro5qDhorBivVjkwLi', 'shop_owner', '9876501234'),
+(3, 'LocalPrice Admin', 'admin@localprice.test', '$2b$10$L4HFVZCZ5wp8sDAxxV.d5.31pQ1QgVr4mxhIro5qDhorBivVjkwLi', 'admin', '9876500000'),
+(4, 'Sri Sai Owner', 'srisai@localprice.test', '$2b$10$L4HFVZCZ5wp8sDAxxV.d5.31pQ1QgVr4mxhIro5qDhorBivVjkwLi', 'shop_owner', '9876511122'),
+(5, 'Krishna Owner', 'krishna@localprice.test', '$2b$10$L4HFVZCZ5wp8sDAxxV.d5.31pQ1QgVr4mxhIro5qDhorBivVjkwLi', 'shop_owner', '9876522233'),
+(6, 'Green Basket Owner', 'greenbasket@localprice.test', '$2b$10$L4HFVZCZ5wp8sDAxxV.d5.31pQ1QgVr4mxhIro5qDhorBivVjkwLi', 'shop_owner', '9876533344')
 ON DUPLICATE KEY UPDATE full_name = VALUES(full_name);
 
 INSERT INTO Stores (store_id, owner_id, store_name, locality, address, phone, approval_status) VALUES

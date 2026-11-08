@@ -1,0 +1,2 @@
+-- Additive compatibility for the LocalPrice account-status controls.
+-- config/database.js adds Users.is_active only when it is absent, preserving existing account data.

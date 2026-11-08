@@ -1,0 +1,19 @@
+/* Readable CSS-only material treatment used when WebGL2 or reduced-effects rules apply. */
+html.liquid-glass-fallback .glass-clear { background: var(--glass-clear-bg); }
+html.liquid-glass-fallback .glass-frosted { background: var(--glass-frosted-bg); }
+html.liquid-glass-fallback .glass-deep { background: var(--glass-deep-bg); }
+html.liquid-glass-fallback .glass-reflective { background: linear-gradient(145deg, var(--glass-bg-2), var(--glass-bg-1)); }
+html.liquid-glass-fallback .glass-solid { background: var(--glass-solid-bg); }
+
+.glass-material { transition: background-color .28s ease, border-color .28s ease, box-shadow .28s ease; }
+.glass-material:is(button, a, [role="button"]):active { transform: scale(.985); }
+.nav-indicator { transition-timing-function: cubic-bezier(.2, .82, .22, 1); }
+.modal-backdrop:not(.is-hidden) .modal { animation: glass-panel-enter .28s cubic-bezier(.2, .82, .22, 1) both; }
+@keyframes glass-panel-enter {
+  from { opacity: .88; transform: translateY(8px) scale(.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .glass-material, .nav-indicator, .modal-backdrop:not(.is-hidden) .modal { transition: none !important; animation: none !important; }
+  .glass-material:is(button, a, [role="button"]):active { transform: none; }
+}

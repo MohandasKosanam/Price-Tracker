@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#e8edf2">
+  <title>LocalPrice Liquid Glass Laboratory</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/liquid-refinement.css">
+  <link rel="stylesheet" href="/css/liquid-glass/fallback.css">
+  <link rel="stylesheet" href="/__dev/assets/liquid-glass-lab.css">
+</head>
+<body>
+  <div class="lab-frame">
+    <header class="lab-header glass-material glass-clear">
+      <a class="brand" href="/__dev/liquid-glass-lab"><span class="brand-mark">LP</span><span>Liquid Glass <span class="brand-muted">Lab</span></span></a>
+      <div class="lab-actions"><span id="glass-status" class="lab-status">Starting renderer…</span><button class="button button-quiet" type="button" id="theme-toggle">Switch to dark</button></div>
+    </header>
+    <main class="lab-main">
+      <section class="lab-intro">
+        <p class="eyebrow">Development only · shared WebGL2 renderer</p>
+        <h1>Materials with a little more <em>depth.</em></h1>
+        <p>The shader refracts a controlled ambient environment texture. Click or tap a material surface to send a damped pressure wave through the shared height field.</p>
+      </section>
+      <section class="lab-nav glass-material glass-reflective" aria-label="Demo navigation">
+        <span class="lab-nav-indicator" id="lab-indicator"></span>
+        <button class="lab-nav-item active" type="button">Home</button>
+        <button class="lab-nav-item" type="button">Explore</button>
+        <button class="lab-nav-item" type="button">Stores</button>
+      </section>
+      <section class="lab-material-grid">
+        <article class="lab-card glass-material glass-clear"><span class="lab-index">01 · Clear optical</span><h2>Clear glass</h2><p>Low roughness, modest thickness, fine refractive edge.</p><button class="button button-quiet" type="button">Press surface</button></article>
+        <article class="lab-card glass-material glass-frosted"><span class="lab-index">02 · Silver cloud</span><h2>Frosted glass</h2><p>Diffused ambient scene with readable, cool silver transmission.</p><button class="button button-quiet" type="button">Press surface</button></article>
+        <article class="lab-card lab-card-wide glass-material glass-deep"><span class="lab-index">03 · Obsidian glass</span><h2>Thicker reflective surface</h2><p>Higher edge response, stronger thickness profile and restrained colour dispersion.</p><button class="button button-primary" type="button" id="open-lab-modal">Open modal</button></article>
+      </section>
+      <section class="lab-readout-grid">
+        <article class="lab-readout glass-material glass-solid"><h2>Wave field</h2><p>Height and velocity are stored in two RG16F GPU textures and stepped with a damped wave equation while an interaction settles.</p><button class="button button-quiet" type="button" id="wave-button">Create pressure ripple</button><output id="wave-state">Settled</output></article>
+        <article class="lab-readout glass-material glass-solid"><h2>Fallback behaviour</h2><p>Switching off WebGL2 or enabling reduced motion leaves the layered CSS glass and all HTML controls usable.</p><span class="lab-fallback-chip">CSS fallback remains available</span></article>
+      </section>
+      <footer class="lab-footnote">Backdrop source: generated Silver Cloud / Obsidian gradients and a subtle grid. Live HTML, product images, and cross-origin content are not sampled.</footer>
+    </main>
+  </div>
+  <div class="modal-backdrop is-hidden" id="lab-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="lab-modal-title">
+    <section class="modal small-modal glass-material glass-reflective"><button class="modal-close icon-button" type="button" id="close-lab-modal" aria-label="Close modal">×</button><p class="eyebrow">Surface response</p><h2 id="lab-modal-title">A quiet ripple, then stillness.</h2><p>The modal panel uses the shared shader and ambient scene texture.</p><button class="button button-primary" type="button" id="modal-ripple">Send ripple</button></section>
+  </div>
+  <script src="/js/liquid-glass/materials.js" defer></script>
+  <script src="/js/liquid-glass/backdrop-provider.js" defer></script>
+  <script src="/js/liquid-glass/shaders.js" defer></script>
+  <script src="/js/liquid-glass/fluid-simulation.js" defer></script>
+  <script src="/js/liquid-glass/renderer.js" defer></script>
+  <script src="/js/liquid-glass/surface-registry.js" defer></script>
+  <script src="/js/liquid-glass/engine.js" defer></script>
+  <script src="/js/visuals.js" defer></script>
+  <script src="/__dev/assets/liquid-glass-lab.js" defer></script>
+</body>
+</html>

@@ -91,24 +91,6 @@ async function api(url, options = {}) {
   return payload;
 }
 
-async function refreshDatabaseStatus() {
-  const banner = $('#database-status');
-  if (!banner) return;
-  try {
-    const response = await fetch('/api/health', { cache: 'no-store' });
-    const payload = await response.json().catch(() => ({}));
-    if (response.ok && payload.status === 'ok') {
-      banner.classList.add('is-hidden');
-      banner.textContent = '';
-      return;
-    }
-    banner.textContent = `Database unavailable: ${payload.message || 'MySQL health check failed.'} Run npm run db:check in the project folder.`;
-  } catch {
-    banner.textContent = 'LocalPrice API is unreachable. Start the server with npm start after configuring local MySQL.';
-  }
-  banner.classList.remove('is-hidden');
-}
-
 function toast(message, type = 'success') {
   const item = document.createElement('div');
   item.className = `toast ${type === 'error' ? 'error' : ''}`;
@@ -1006,8 +988,6 @@ setupAuthCat();
 
 (async function init() {
   setTheme(document.documentElement.dataset.theme);
-  refreshDatabaseStatus();
-  window.setInterval(refreshDatabaseStatus, 15000);
   try { state.user = (await api('/api/auth/me')).user; } catch (error) { console.warn(error); }
   await loadCategories();
   renderRoute();

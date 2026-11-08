@@ -339,25 +339,6 @@ html.liquid-glass-fallback .glass-material.glass-frosted,
 html.liquid-glass-fallback .glass-material.glass-deep,
 html.liquid-glass-fallback .glass-material.glass-reflective,
 html.liquid-glass-fallback .glass-material.glass-solid { background-image: none; }
-.database-status {
-  position: fixed;
-  z-index: 1000;
-  top: 12px;
-  left: 50%;
-  width: min(760px, calc(100% - 24px));
-  padding: 12px 16px;
-  transform: translateX(-50%);
-  color: #fff7f7;
-  background: rgba(112, 35, 46, .90);
-  border: 1px solid rgba(255, 235, 235, .34);
-  border-radius: 14px;
-  box-shadow: 0 12px 32px rgba(30, 8, 12, .28), inset 0 1px rgba(255, 255, 255, .16);
-  backdrop-filter: blur(16px) saturate(125%);
-  -webkit-backdrop-filter: blur(16px) saturate(125%);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.45;
-}
 @media (prefers-reduced-motion: reduce) {
   .glass-material::before { transition: none; }
   .modal-backdrop:not(.is-hidden) .modal { animation: none; }

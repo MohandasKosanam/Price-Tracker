@@ -71,6 +71,12 @@ function prepareAuthUI() {
   const brand = intro?.querySelector('.brand-mark');
   if (intro && brand && !intro.querySelector('[data-auth-cat]')) brand.insertAdjacentHTML('afterend', authCatMarkup);
   const loginForm = $('#login-form');
+  const registerForm = $('#register-form');
+  registerForm?.classList.add('auth-form');
+  const registerSubmit = registerForm?.querySelector('button[type="submit"]');
+  if (registerForm && registerSubmit && !registerForm.querySelector('[data-auth-feedback]')) {
+    registerSubmit.insertAdjacentHTML('beforebegin', '<p class="auth-feedback" data-auth-feedback aria-live="polite"></p>');
+  }
   const submit = loginForm?.querySelector('button[type="submit"]');
   if (loginForm && submit) {
     loginForm.classList.add('auth-form');
@@ -311,8 +317,7 @@ function setupAuthCat() {
   suspendAuthCat();
 }
 
-function setAuthFeedback(message = '', type = '') {
-  const form = $('#login-form');
+function setAuthFeedback(message = '', type = '', form = $('#login-form')) {
   const feedback = form?.querySelector('[data-auth-feedback]');
   if (!form || !feedback) return;
   feedback.textContent = message;
@@ -345,7 +350,8 @@ function switchAuthTab(tab, initializing = false) {
   $$('[data-auth-tab]').forEach((button) => button.classList.toggle('active', button.dataset.authTab === tab));
   $('#login-form').classList.toggle('is-hidden', tab !== 'login');
   $('#register-form').classList.toggle('is-hidden', tab !== 'register');
-  setAuthFeedback();
+  setAuthFeedback('', '', $('#login-form'));
+  setAuthFeedback('', '', $('#register-form'));
   if (!initializing) setAuthCatMood(tab === 'login' ? 'idle' : 'curious', true);
 }
 
@@ -705,6 +711,7 @@ async function handleLogin(form) {
 async function handleRegister(form) {
   const values = Object.fromEntries(new FormData(form));
   const submit = form.querySelector('button[type="submit"]');
+  setAuthFeedback('', '', form);
   if (submit) submit.disabled = true;
   setAuthCatMood('submitting');
   try {
@@ -715,7 +722,7 @@ async function handleRegister(form) {
     closeModals();
     toast(data.message);
     go(state.user.role === 'shop_owner' ? 'owner' : 'customer');
-  } catch (error) { setAuthCatMood('error'); toast(error.message, 'error'); }
+  } catch (error) { setAuthFeedback(error.message, 'error', form); setAuthCatMood('error'); }
   finally { if (submit) submit.disabled = false; }
 }
 
